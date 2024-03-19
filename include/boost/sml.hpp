@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2020 Kris Jusiak (kris at jusiak dot net)
+// Copyright (c) 2016-2024 Kris Jusiak (kris at jusiak dot net)
 //
 // Distributed under the Boost Software License, Version 1.0.
 // (See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -9,12 +9,12 @@
 #if (__cplusplus < 201305L && _MSC_VER < 1900)
 #error "[Boost::ext].SML requires C++14 support (Clang-3.4+, GCC-5.1+, MSVC-2015+)"
 #else
-#define BOOST_SML_VERSION 1'1'9
+#define BOOST_SML_VERSION 1'1'11
 #define BOOST_SML_NAMESPACE_BEGIN \
   namespace boost {               \
   inline namespace ext {          \
   namespace sml {                 \
-  inline namespace v1_1_9 {
+  inline namespace v1_1_11 {
 #define BOOST_SML_NAMESPACE_END \
   }                             \
   }                             \
@@ -503,6 +503,10 @@ constexpr T *try_get(const pool_type<T *> *object) {
   return object->value;
 }
 template <class T, class TPool>
+constexpr bool would_instantiate_missing_ctor_parameter() {
+  return is_same<missing_ctor_parameter<T>, decltype(try_get<T>(aux::declval<TPool>()))>::value;
+}
+template <class T, class TPool>
 T *get(TPool *p) {
   return static_cast<pool_type<T> &>(p).value;
 }
@@ -580,52 +584,64 @@ struct zero_wrapper : TExpr {
 };
 template <class R, class TBase, class... TArgs, class T>
 struct zero_wrapper<R (TBase::*)(TArgs...), T> {
-  constexpr explicit zero_wrapper(R (TBase::*ptr)(TArgs...)) : ptr{ptr} {}
+  using type = R (TBase::*)(TArgs...);
+  constexpr explicit zero_wrapper(type ptr) : ptr{ptr} {}
   constexpr auto operator()(TBase &self, TArgs... args) { return (self.*ptr)(args...); }
+  constexpr type get() const { return ptr; }
 
  private:
-  R (TBase::*ptr)(TArgs...){};
+  type ptr{};
 };
 template <class R, class TBase, class... TArgs, class T>
 struct zero_wrapper<R (TBase::*)(TArgs...) const, T> {
-  constexpr explicit zero_wrapper(R (TBase::*ptr)(TArgs...) const) : ptr{ptr} {}
+  using type = R (TBase::*)(TArgs...) const;
+  constexpr explicit zero_wrapper(type ptr) : ptr{ptr} {}
   constexpr auto operator()(TBase &self, TArgs... args) { return (self.*ptr)(args...); }
+  constexpr type get() const { return ptr; }
 
  private:
-  R (TBase::*ptr)(TArgs...) const {};
+  type ptr{};
 };
 template <class R, class... TArgs, class T>
 struct zero_wrapper<R (*)(TArgs...), T> {
-  explicit zero_wrapper(R (*ptr)(TArgs...)) : ptr{ptr} {}
+  using type = R (*)(TArgs...);
+  explicit zero_wrapper(type ptr) : ptr{ptr} {}
   constexpr auto operator()(TArgs... args) { return (*ptr)(args...); }
+  constexpr type get() const { return ptr; }
 
  private:
-  R (*ptr)(TArgs...){};
+  type ptr{};
 };
 #if defined(__cpp_noexcept_function_type)
 template <class R, class TBase, class... TArgs, class T>
 struct zero_wrapper<R (TBase::*)(TArgs...) noexcept, T> {
-  constexpr explicit zero_wrapper(R (TBase::*ptr)(TArgs...) noexcept) : ptr{ptr} {}
+  using type = R (TBase::*)(TArgs...) noexcept;
+  constexpr explicit zero_wrapper(type ptr) : ptr{ptr} {}
   constexpr auto operator()(TBase &self, TArgs... args) { return (self.*ptr)(args...); }
+  constexpr type get() const { return ptr; }
 
  private:
-  R (TBase::*ptr)(TArgs...) noexcept {};
+  type ptr {};
 };
 template <class R, class TBase, class... TArgs, class T>
 struct zero_wrapper<R (TBase::*)(TArgs...) const noexcept, T> {
-  constexpr explicit zero_wrapper(R (TBase::*ptr)(TArgs...) const noexcept) : ptr{ptr} {}
+  using type = R (TBase::*)(TArgs...) const noexcept;
+  constexpr explicit zero_wrapper(type ptr) : ptr{ptr} {}
   constexpr auto operator()(TBase &self, TArgs... args) { return (self.*ptr)(args...); }
+  constexpr type get() const { return ptr; }
 
  private:
-  R (TBase::*ptr)(TArgs...) const noexcept {};
+  type ptr {};
 };
 template <class R, class... TArgs, class T>
 struct zero_wrapper<R (*)(TArgs...) noexcept, T> {
-  explicit zero_wrapper(R (*ptr)(TArgs...) noexcept) : ptr{ptr} {}
+  using type = R (*)(TArgs...) noexcept;
+  explicit zero_wrapper(type ptr) : ptr{ptr} {}
   constexpr auto operator()(TArgs... args) { return (*ptr)(args...); }
+  constexpr type get() const { return ptr; }
 
  private:
-  R (*ptr)(TArgs...) noexcept {};
+  type ptr {};
 };
 #endif
 template <class, class>
@@ -653,13 +669,13 @@ auto get_type_name(const char *ptr, index_sequence<Ns...>) {
 template <class T>
 const char *get_type_name() {
 #if defined(_MSC_VER) && !defined(__clang__)
-  return detail::get_type_name<T, 39>(__FUNCSIG__, make_index_sequence<sizeof(__FUNCSIG__) - 39 - 8>{});
+  return detail::get_type_name<T, 65>(__FUNCSIG__, make_index_sequence<sizeof(__FUNCSIG__) - 65 - 8>{});
 #elif defined(__clang__) && (__clang_major__ >= 12)
   return detail::get_type_name<T, 50>(__PRETTY_FUNCTION__, make_index_sequence<sizeof(__PRETTY_FUNCTION__) - 50 - 2>{});
 #elif defined(__clang__)
   return detail::get_type_name<T, 63>(__PRETTY_FUNCTION__, make_index_sequence<sizeof(__PRETTY_FUNCTION__) - 63 - 2>{});
 #elif defined(__GNUC__)
-  return detail::get_type_name<T, 68>(__PRETTY_FUNCTION__, make_index_sequence<sizeof(__PRETTY_FUNCTION__) - 68 - 2>{});
+  return detail::get_type_name<T, 69>(__PRETTY_FUNCTION__, make_index_sequence<sizeof(__PRETTY_FUNCTION__) - 69 - 2>{});
 #endif
 }
 #if defined(__cpp_nontype_template_parameter_class) || \
@@ -730,11 +746,14 @@ class queue_event {
   }
 
  public:
+  constexpr queue_event() : dtor(nullptr) {}
   constexpr queue_event(queue_event &&other) : id(other.id), dtor(other.dtor), move(other.move) {
     move(data, static_cast<queue_event &&>(other));
   }
   constexpr queue_event &operator=(queue_event &&other) {
-    dtor(data);
+    if (dtor != nullptr) {
+      dtor(data);
+    }
     id = other.id;
     dtor = other.dtor;
     move = other.move;
@@ -750,7 +769,11 @@ class queue_event {
     move = &move_impl<T>;
     new (&data) T(static_cast<T &&>(object));
   }
-  ~queue_event() { dtor(data); }
+  ~queue_event() {
+    if (dtor) {
+      dtor(data);
+    }
+  }
   alignas(alignment) aux::byte data[size];
   int id = -1;
 
@@ -1175,8 +1198,8 @@ template <class T, class, class... Ts>
 transitions<Ts...> get_state_mapping_impl(state_mappings<T, aux::type_list<Ts...>> *);
 template <class T, class TMappings, class TUnexpected>
 struct get_state_mapping {
-  using type = aux::conditional_t<aux::is_same<decltype(get_state_mapping_impl<T, TUnexpected>((TMappings *)0)), transitions<TUnexpected>>::value, 
-      decltype(get_state_mapping_impl<_, TUnexpected>((TMappings *)0)), 
+  using type = aux::conditional_t<aux::is_same<decltype(get_state_mapping_impl<T, TUnexpected>((TMappings *)0)), transitions<TUnexpected>>::value,
+      decltype(get_state_mapping_impl<_, TUnexpected>((TMappings *)0)),
       decltype(get_state_mapping_impl<T, TUnexpected>((TMappings *)0))>;
 };
 template <class S>
@@ -1372,6 +1395,25 @@ struct process_queue : aux::pair<back::policies::process_queue_policy__, process
 }  // namespace back
 namespace back {
 namespace policies {
+struct dont_instantiate_statemachine_class_policy__ {};
+struct dont_instantiate_statemachine_class
+    : aux::pair<dont_instantiate_statemachine_class_policy__, dont_instantiate_statemachine_class> {};
+}  // namespace policies
+}  // namespace back
+
+namespace aux {
+template <class TSM>
+struct should_not_instantiate_statemachine_class
+    : integral_constant<bool, is_same<typename TSM::dont_instantiate_statemachine_class_policy,
+                                                back::policies::dont_instantiate_statemachine_class>::value> {};
+
+template <class TSM>
+struct should_not_subclass_statemachine_class
+    : integral_constant<bool, is_empty<typename TSM::sm>::value || should_not_instantiate_statemachine_class<TSM>::value> {};
+} // namespace aux
+
+namespace back {
+namespace policies {
 struct testing_policy__ {};
 struct testing : aux::pair<testing_policy__, testing> {};
 }  // namespace policies
@@ -1423,7 +1465,8 @@ struct sm_policy {
       decltype(get_policy<no_policy, policies::process_queue_policy__>((aux::inherit<TPolicies...> *)0));
   using logger_policy = decltype(get_policy<no_policy, policies::logger_policy__>((aux::inherit<TPolicies...> *)0));
   using testing_policy = decltype(get_policy<no_policy, policies::testing_policy__>((aux::inherit<TPolicies...> *)0));
-  using default_dispatch_policy = policies::jump_table;
+  using dont_instantiate_statemachine_class_policy = decltype(get_policy<no_policy, policies::dont_instantiate_statemachine_class_policy__>((aux::inherit<TPolicies...> *)0));
+  using default_dispatch_policy = policies::switch_stm;
   using dispatch_policy =
       decltype(get_policy<default_dispatch_policy, policies::dispatch_policy__>((aux::inherit<TPolicies...> *)0));
   template <class T>
@@ -1469,7 +1512,7 @@ struct composable : aux::is<aux::pool, decltype(composable_impl<T>(0))> {};
 #endif
 namespace back {
 template <class TSM>
-struct sm_impl : aux::conditional_t<aux::is_empty<typename TSM::sm>::value, aux::none_type, typename TSM::sm> {
+struct sm_impl : aux::conditional_t<aux::should_not_subclass_statemachine_class<TSM>::value, aux::none_type, typename TSM::sm> {
   using sm_t = typename TSM::sm;
   using thread_safety_t = typename TSM::thread_safety_policy::type;
   template <class T>
@@ -1492,6 +1535,7 @@ struct sm_impl : aux::conditional_t<aux::is_empty<typename TSM::sm>::value, aux:
   using events_ids_t = aux::apply_t<aux::inherit, events_t>;
   using has_unexpected_events = typename aux::is_base_of<unexpected, aux::apply_t<aux::inherit, events_t>>::type;
   using has_entry_exits = typename aux::is_base_of<entry_exit, aux::apply_t<aux::inherit, events_t>>::type;
+  using should_not_instantiate_statemachine_class_t = aux::should_not_instantiate_statemachine_class<TSM>;
   using defer_t = defer_queue_t<aux::apply_t<queue_event, events_t>>;
   using process_t = process_queue_t<aux::apply_t<queue_event, events_t>>;
   using deps = aux::apply_t<merge_deps, transitions_t>;
@@ -1504,13 +1548,29 @@ struct sm_impl : aux::conditional_t<aux::is_empty<typename TSM::sm>::value, aux:
 #endif
   struct mappings : mappings_t<transitions_t> {};
   template <class TPool>
-  constexpr sm_impl(aux::init, const TPool &p) : sm_impl{p, aux::is_empty<sm_t>{}} {}
+  constexpr sm_impl(aux::init, const TPool &p) : sm_impl{p, aux::should_not_subclass_statemachine_class<TSM>{}} {}
   template <class TPool>
   constexpr sm_impl(const TPool &p, aux::false_type) : sm_t{aux::try_get<sm_t>(&p)}, transitions_{(*this)()} {
     initialize(typename sm_impl<TSM>::initial_states_t{});
   }
+
+  template <class T, class TPool>
+  constexpr decltype(auto) try_get_without_instantiating(const TPool &p) const {
+    static_assert(!(should_not_instantiate_statemachine_class_t::value &&
+              aux::would_instantiate_missing_ctor_parameter<sm_t, decltype(&p)>()),
+            "When policy sml::dont_instantiate_statemachine_class is used, you have to provide a reference to an "
+            "instance of the transition table type (boost::sml::sm< your_transition_table_type >) "
+            "as well as a reference to instances of all sub-statemachine types as constructor parameters like this: \n"
+            "boost::sml::sm< your_transition_table_type , sml::dont_instantiate_statemachine_class >{\n"
+            "    your_transition_table_instance\n"
+            "}"
+  );
+
+    return aux::try_get<T>(&p)();
+  }
+
   template <class TPool>
-  constexpr sm_impl(const TPool &p, aux::true_type) : transitions_{aux::try_get<sm_t>(&p)()} {
+  constexpr sm_impl(const TPool &p, aux::true_type) : transitions_{ try_get_without_instantiating<sm_t>(p) } {
     initialize(typename sm_impl<TSM>::initial_states_t{});
   }
   template <class TEvent, class TDeps, class TSubs>
@@ -1827,7 +1887,13 @@ class sm {
   using transitions = aux::apply_t<aux::type_list, transitions_t>;
 
  private:
-  using sm_all_t = aux::apply_t<get_non_empty_t, aux::join_t<aux::type_list<sm_t>, aux::apply_t<get_sm_t, state_machines>>>;
+  using sm_all_t = aux::apply_t<get_non_empty_t, aux::join_t<
+      aux::conditional_t<
+            aux::is_same<no_policy, typename TSM::dont_instantiate_statemachine_class_policy>::value,
+            aux::type_list<sm_t>,
+            aux::none_type>,
+      aux::apply_t<get_sm_t, state_machines>>>;
+
   using sub_sms_t =
       aux::apply_t<aux::pool,
                    typename convert_to_sm<TSM, aux::apply_t<aux::unique_t, aux::apply_t<get_sub_sms, states>>>::type>;
@@ -2227,6 +2293,7 @@ template <template <class...> class T>
 using defer_queue = back::policies::defer_queue<T>;
 template <template <class...> class T>
 using process_queue = back::policies::process_queue<T>;
+using dont_instantiate_statemachine_class = back::policies::dont_instantiate_statemachine_class;
 #if defined(_MSC_VER) && !defined(__clang__)
 template <class T, class... TPolicies, class T__ = aux::remove_reference_t<decltype(aux::declval<T>())>>
 using sm = back::sm<back::sm_policy<T__, TPolicies...>>;
