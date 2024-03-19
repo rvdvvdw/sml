@@ -323,6 +323,75 @@ struct is_unique<type<Rs...>, T, Ts...>
     : conditional_t<is_base_of<type<T>, inherit<type<Rs>...>>::value, false_type, is_unique<type<Rs..., T>, Ts...>> {};
 template <class... Ts>
 using is_unique_t = is_unique<type<>, Ts...>;
+
+//====================================VDW===============================
+template<typename C>
+using raw = remove_const_t<remove_pointer_t<remove_reference_t<C>>>;
+template <class, class...>
+struct merge_base_impl;
+template <class T, class... Rs, class... Ts>
+struct merge_base_impl<type_list<Rs...>, T&, Ts...>
+{
+  static constexpr auto bases = (0 + ... + int{is_base_of<raw<T>, raw<Ts>>::value}) + 
+                              (0 + ... + int{is_base_of<raw<T>, raw<Rs>>::value});
+  static_assert(bases <= 1, "multiple classes with same base");
+
+  using type = conditional_t<(bases > 0), 
+                  typename merge_base_impl<type_list<Rs...>, Ts...>::type, 
+                  typename merge_base_impl<type_list<Rs..., remove_const_t<T>&>, Ts...>::type>;
+};
+template <class T, class... Rs, class... Ts>
+struct merge_base_impl<type_list<Rs...>, T, Ts...> : merge_base_impl<type_list<Rs..., T>, Ts...> {};
+template <class... Ts>
+struct merge_base_impl<type_list<Ts...>> : type_list<Ts...> {};
+template <class... Ts>
+struct merge_base : merge_base_impl<type_list<>, Ts...> {};
+template <class T>
+struct merge_base<T> : type_list<T> {};
+template <class... Ts>
+using merge_base_t = typename merge_base<Ts...>::type;
+
+template <class, class...>
+struct merge_const_impl;
+template <class T, class... Rs, class... Ts>
+struct merge_const_impl<type_list<Rs...>, T&, Ts...>
+{
+  static constexpr auto consts = (0 + ... + int{is_same<raw<T>, raw<Ts>>::value}) + 
+                                (0 + ... + int{is_same<raw<T>, raw<Rs>>::value});
+
+  using type = conditional_t<(consts > 0),
+                  typename merge_const_impl<type_list<Rs...>, Ts...>::type,
+                  typename merge_const_impl<type_list<Rs..., T&>, Ts...>::type>;
+};
+template <class T, class... Rs, class... Ts>
+struct merge_const_impl<type_list<Rs...>, T, Ts...> : merge_const_impl<type_list<Rs..., T>, Ts...> {};
+template <class... Ts>
+struct merge_const_impl<type_list<Ts...>> : type_list<Ts...> {};
+template <class... Ts>
+struct merge_const : merge_const_impl<type_list<>, Ts...> {};
+template <class T>
+struct merge_const<T> : type_list<T> {};
+template <class... Ts>
+using merge_const_t = typename merge_const<Ts...>::type;
+
+template<class T, class... Ts>
+struct get_derived_impl;
+template<class T, class R, class... Ts>
+struct get_derived_impl<T, R, Ts...>
+{
+  using type = conditional_t<is_base_of<raw<T>, raw<R>>::value, R, typename get_derived_impl<T, Ts...>::type>;
+};
+template<class T>
+struct get_derived_impl<T>
+{
+  using type = void;
+};
+template <class T, class... Ts>
+struct get_derived : get_derived_impl<T, Ts...> {};
+template <class T, class... Ts>
+using get_derived_t = typename get_derived<T, Ts...>::type;
+//=======================================VDW========================================
+
 template <template <class...> class, class>
 struct apply;
 template <template <class...> class T, template <class...> class U, class... Ts>
@@ -356,6 +425,9 @@ struct init {};
 struct pool_type_base {
   __BOOST_SML_ZERO_SIZE_ARRAY(byte);
 };
+struct queue_type_base {
+  __BOOST_SML_ZERO_SIZE_ARRAY(byte);
+};
 template <class T, class = void>
 struct pool_type_impl : pool_type_base {
   constexpr explicit pool_type_impl(T object) : value{object} {}
@@ -384,10 +456,19 @@ template <class T>
 struct missing_ctor_parameter {
   static constexpr auto value = false;
   constexpr auto operator()() const { return T{}(); }
-  template <class U, __BOOST_SML_REQUIRES(!aux::is_base_of<pool_type_base, U>::value && aux::is_constructible<U>::value)>
-  constexpr operator U() {
-    return {};
-  }
+
+// We don't want automatic default construction of dependencies
+//  template <class U, __BOOST_SML_REQUIRES(!aux::is_base_of<pool_type_base, U>::value && aux::is_constructible<U>::value)>
+//  constexpr operator U() {
+//    return {};
+//  }
+
+// We only want automatic default construction of queue handlers 
+ template <class U, __BOOST_SML_REQUIRES(aux::is_base_of<queue_type_base, U>::value && aux::is_constructible<U>::value)>
+ constexpr operator U() {
+   return {};
+ }
+
 #if !(defined(_MSC_VER) && !defined(__clang__))
   template <class TMissing, __BOOST_SML_REQUIRES(!aux::is_base_of<pool_type_base, TMissing>::value)>
   constexpr operator TMissing &() const {
@@ -422,14 +503,6 @@ constexpr T *try_get(const pool_type<T *> *object) {
   return object->value;
 }
 template <class T, class TPool>
-constexpr T &get(TPool &p) {
-  return static_cast<pool_type<T> &>(p).value;
-}
-template <class T, class TPool>
-constexpr const T &cget(const TPool &p) {
-  return static_cast<const pool_type<T> &>(p).value;
-}
-template <class T, class TPool>
 T *get(TPool *p) {
   return static_cast<pool_type<T> &>(p).value;
 }
@@ -456,6 +529,21 @@ struct pool<> {
   constexpr explicit pool(Ts &&...) {}
   __BOOST_SML_ZERO_SIZE_ARRAY(byte);
 };
+template <class T, class... Ts>
+constexpr T &get(pool<Ts...> &p) {
+  if constexpr(is_base_of<pool_type<T>, pool<Ts...>>::value)
+  {
+    return static_cast<pool_type<T> &>(p).value;
+  }
+  else
+  {
+    return static_cast<pool_type<get_derived_t<T, Ts...>> &>(p).value;
+  }
+}
+template <class T, class TPool>
+constexpr const T &cget(const TPool &p) {
+  return static_cast<const pool_type<T> &>(p).value;
+}
 template <int, class>
 struct type_id_type {};
 template <class, class...>
@@ -680,7 +768,7 @@ class queue_event_call {
   call_t call{};
 };
 template <class... TEvents>
-struct queue_handler : queue_event_call<TEvents>... {
+struct queue_handler : aux::queue_type_base, queue_event_call<TEvents>... {
   constexpr queue_handler() = default;
   template <class TQueue, class = typename TQueue::container_type>
   constexpr explicit queue_handler(TQueue &queue)
@@ -1746,7 +1834,9 @@ class sm {
   using deps = aux::apply_t<merge_deps, transitions_t>;
   using deps_t =
       aux::apply_t<aux::pool,
-                   aux::apply_t<aux::unique_t, aux::join_t<deps, sm_all_t, logger_dep_t, aux::apply_t<merge_deps, sub_sms_t>>>>;
+                   aux::apply_t<aux::merge_base_t, 
+                   aux::apply_t<aux::merge_const_t,
+                   aux::apply_t<aux::unique_t, aux::join_t<deps, sm_all_t, logger_dep_t, aux::apply_t<merge_deps, sub_sms_t>>>>>>;
   struct events_ids : aux::apply_t<aux::inherit, events> {};
 
  public:
