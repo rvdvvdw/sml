@@ -30,7 +30,7 @@ include(CTest)
 
 option(SML_BUILD_BENCHMARKS "Build benchmarks" OFF)
 option(SML_BUILD_EXAMPLES   "Build examples"   OFF)
-option(SML_BUILD_TESTS      "Build tests"      OFF)
+option(SML_BUILD_TESTS      "Build tests"      ON)
 option(SML_USE_EXCEPTIONS   "Do not disable exceptions" ON)
 
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" AND "${CMAKE_CXX_COMPILER_VERSION}" VERSION_LESS 6.0.0)
